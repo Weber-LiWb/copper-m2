@@ -82,3 +82,34 @@ When a module changes how the app fits together, add a section here:
 **Risks and open questions:** cost, privacy, accuracy or safety risks, and how
 you handle them.
 ```
+
+## Module 2: Ask Copper, the shopping chatbot
+
+**Summary:** A floating chat panel on the landing page answers price, total and
+stock questions by calling tools instead of guessing, and shows each step as it
+happens.
+
+| Piece | Where | What it does |
+|---|---|---|
+| Page / route | `app/page.tsx` | Mounts the panel and passes `isAiConfigured()` to it. No new routes |
+| Components | `components/copper/ask-copper.tsx`, `ask-copper-steps.tsx` | The panel, two separate chats (tools on / off), and the stations that draw each answer |
+| Tools | `lib/copper/assistant/tools.ts` | `get_products`, `get_prices`, `calculate_cost`, `check_availability`: read-only, with zod input contracts |
+| Instructions | `lib/copper/assistant/instructions.ts` | Copper's system prompt, sent only when tools are on |
+| Server Action | `lib/copper/assistant/ask.ts` | `askCopper()` streams the answer and returns a live `Progress` |
+| Data | `lib/copper/data/inventory.json` | Stock list, read fresh by `check_availability` |
+| AI calls | `lib/ai/call.ts` (module 2, `ask-copper`) | Gemini through `callStream`, with thought summaries; up to 5 steps |
+
+**Data flow:** shopper question → panel → `askCopper()` → `callStream` → model
+asks for a tool → tool runs in our code (catalog or stock list) → result goes
+back to the model → reply. Each stream part updates a `Progress` that the panel
+reads with `readLive()`.
+
+**Decisions and trade-offs:** Prices, math and stock come from code, not from
+the model, so they can't be invented. With tools off the model gets no
+instructions and no tools, which is what makes the comparison honest. The two
+chats keep separate histories so the tools-off model can't copy a tools answer.
+
+**Risks and open questions:** Without tools the model invents prices, so that
+chat is labeled as possibly made up. The tools only read, so a bad tool call
+can't change anything. If the stock list can't be read, the tool says so
+instead of guessing. Every question is logged to `ai_calls` for cost.
